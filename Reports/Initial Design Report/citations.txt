@@ -1,0 +1,51 @@
+Detail how you will communicate between Ultra96 and the evaluation server. Explain when and how secure communication is ensured. Detail the message format, encryption protocol and library APIs you will be using.
+Detail how you will communicate between laptops and Ultra96. How will you handle tunneling?
+Detail the message format
+Discuss how you will handle concurrency on the laptops or Ultra96.
+Discuss how you will communicate between Ultra96 and Visualizer.
+Detail the message format.
+
+
+https://docs.python.org/3/howto/sockets.html
+https://notes.shichao.io/unp/ch4/
+https://realpython.com/python-sockets/
+https://en.wikipedia.org/wiki/Transmission_Control_Protocol
+
+socket(family, type) function specifies type of communication protocol
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+serversocket.bind((socket.gethostname(), PORT))
+The bind function assigns a local protocol address to a socket
+serversocket.listen(queuesize)
+listen() used by the server side to wait for any connection request from the client side.
+function converts an unconnected socket into a passive socket, indicating that the kernel should accept incoming connection requests directed to this socket
+
+
+An incomplete connection queue, which contains an entry for each SYN that has arrived from a client for which the server is awaiting completion of the TCP three-way handshake. These sockets are in the SYN_RCVD state
+A completed connection queue, which contains an entry for each client with whom the TCP three-way handshake has completed. These sockets are in the ESTABLISHED state
+
+connect(host, port) function used by TCP client to establish connection with TCP server
+s.connect(HOST, PORT)
+The client does not have to call bind before calling connect: the kernel will choose both an ephemeral port and the source IP address if necessary.
+connect function initiates TCP's three-way handshake
+
+(clientsocket, address) = serversocket.accept()
+Accept: This function synchronously extracts the first pending connection request from the
+connection request queue of the listening socket and then creates and returns a new  connection socket. 
+Each incoming connections is placed in this queue until a matching accept() is issued by the server side.
+the accept() call is used to remove one request from the queue. 
+
+
+But when a client request can take longer to service, we do not want to tie up a single server with one client; we want to handle multiple clients at the same time. The simplest way to write a concurrent server under Unix is to fork a child process to handle each client.
+
+The following code shows the outline for a typical concurrent server:
+
+close() function is also used to close a socket and terminate a TCP connection.
+
+https://pycryptodome.readthedocs.io/en/latest/src/util/util.html?highlight=pad#Crypto.Util.Padding.pad
+
+https://sshtunnel.readthedocs.io/en/latest/
+
+https://www.ni.com/docs/en-US/bundle/labview-fpga-module/page/lvfpgaconcepts/fpga_dma_communication.html
+
+https://superfastpython.com/threading-in-python/

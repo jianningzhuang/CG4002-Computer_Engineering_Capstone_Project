@@ -1,0 +1,38 @@
+Waiting for a lock, e.g. calling acquire() on a threading.Lock.
+Waiting to be notified, e.g. calling wait() on a threading.Condition.
+Waiting for a thread to terminate, e.g. calling join() on a threading.Thread.
+Waiting for a semaphore, e.g. calling acquire() on a threading.Semaphore.
+Waiting for an event, e.g. calling wait() on a threading.Event.
+Waiting for a barrier, e.g. calling wait() on a threading.Barrier.
+
+
+# create a lock
+lock = Lock()
+# acquire the lock
+lock.acquire()
+# ...
+# release the lock
+lock.release()
+
+
+An event is a thread-safe boolean flag.
+An event is a simple concurrency primitive that allows communication between threads.
+
+event = threading.Event()
+
+if event.is_set():
+    # do something...
+
+# set the event
+event.set()
+
+# mark the event as not set
+event.clear()
+
+# wait for the event to be set
+event.wait()
+
+need to pass in event
+
+Use a queue.Queue to share a result between threads.
+Use a global variable to share a result between threads.

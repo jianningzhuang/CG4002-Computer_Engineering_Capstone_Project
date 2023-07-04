@@ -1,0 +1,340 @@
+ssh -X xilinx@192.168.95.220 for GUI
+whoneedsvisualizer
+
+Helper:
+
+- Actions Class including [no, shoot, shield, grenade, reload, logout]
+
+- 'none' changed to double quotes? "none"
+
+
+PlayerState:
+
+__init__(self)
+
+- game and ammo constants
+- initialise player state
+
+	self.hp             = self.max_hp
+	self.action         = 'none'
+      self.bullets        = self.magazine_size
+      self.grenades       = self.max_grenades
+      self.shield_time    = 0
+      self.shield_health  = 0
+      self.num_shield     = self.max_shields
+      self.num_deaths     = 0
+
+- self.shield_start_time = time.time() - 30
+
+	initial self.shield_start_time (time.time() - 30) would never be used since value is never checked until self.shield_time > 0
+	but self.shield_start_time will already be updated to time.time() when shield is activated
+
+get_dict(self)
+
+- convert player state to dictionary and return dictionary\
+- order of dict and state different? (num_shields and num_deaths swap)
+
+
+initialize(self, action, bullets_remaining, grenades_remaining,
+                   hp, num_deaths, num_unused_shield,
+                   shield_health, shield_time_remaining)
+
+- initialise/reset player state with values passed in
+- when will it be used?
+
+get_difference(self, game_state_received)
+
+- check action_expected with action_received to get action_matched
+- calculate difference between other integer player state values if different, else no key added to dictionary
+- return difference dictionary
+- good to get diff_dict with only {action_expected, action_received, action_matched = True}
+
+
+initialize_from_dict(self, player_dict: dict)
+
+- initialise/reset player state from player state dictionary
+
+
+initialize_from_player_state(self, player_state) ***CHANGED***
+
+- initialise/reset player state from player state
+- original player_state attributes weird? player_state.bullets_remaining no such attribute?
+- used in init_players in GameState, but passed in is still PlayerStateBase?
+
+
+StateStaff(PlayerStateBase):
+
+update(self, pos_self, pos_opponent, action_self, action_opponent, action_opponent_is_valid)
+
+
+- if shield time > 0, update shield time
+- if shield time still > 0, check if action is shield, update shield time anyway
+- if shield time = 0 and action is shield, refresh shield if num_shield > 0
+- if shield time <= 0, set shield health to 0
+
+- check for harm if opponent action is valid
+- if pos_self == 4 (barrier) and pos_opponent != 4, will not be hit, no harm
+- if pos_self != 4 and pos_opponent == 4 (barrier), will not be hit, no harm
+- if both within barrier or both outside barrier, will be hit, reduce shield and hp according to opponent shoot or grenade
+- can eat through shield to still reduce hp
+- if dead, revive with num_deahs += 1
+
+- check for ammo reduction or reload, only reload when self.bullets = 0
+
+action_is_valid(self, action_self)
+
+- check valid action
+- shield only when shield_time = 0
+- shoot when bullets > 0
+- grenade when grenades > 0
+- reload when bullets = 0
+- else invalid
+
+- valid action only sent to opponent, and only used to check for harm (shoot and grenade)
+- self need to check for valid shield and reload in own update
+
+GameState
+
+__init__(self)
+
+- game state consists of 2 player states
+
+get_dict(self)
+
+- combine p1 and p2 dictionary
+- game state dictionary
+
+_get_data_plain_text (self)
+
+- jsonify game state dictionary
+- not used by ultra96?
+
+send_plaintext(self, remote_socket)
+
+- gets json game state
+- send Len_JSON encoded in utf-8
+- not used by ultra96?
+- returns success
+
+init_player(...)
+
+- call player initialise function with values passed in
+- used by init-players_random
+
+init_players_random(self)
+
+- generate random values
+- init_player with the random values
+
+init_players (self, player_1: PlayerStateBase, player_2: PlayerStateBase)
+
+- call initialize_from_player_state for both players
+- not used?
+
+
+MoveEngine:
+
+_init_list(_r)
+
+- if r > 0 = 1, 1 more shoot, total 19 actions 
+- if r = 0, total 18 actions, 6 shoot, 4 shield, 4 grenade, 4 reload
+- shuffle actions
+
+__get_positions(m, ret)
+
+- generate m random positions between 1 to 4
+
+__init__(self, is_single_player, disable_gui)
+
+- intialise game state
+- if 1 player, positions irrelevane
+- if disable_gui, fixed actions generated
+- intiialise 18/19 actions for each player depending on r = 0 or r = 1
+- p1 start at pos 1, p2 start at pos 3
+
+
+***1 player + disable gui***
+P1 Actions: 33 fixed actions + 1 logout => 34 fixed actions
+P2 Actions: 34 * [Helper.Actions.no]
+
+P1 Positions: 34 positions at [1] (ask to move out on 33rd action (before turn 32), last action before logout)
+P2 Positions: 34 positions at [1]
+
+***1 player + enable gui***
+P1 Actions: 18/19 random actions + 1 logout => total 19/20 actions
+P2 Actions: 19/20 * [Helper.Actions.no]
+same number of actions for each player since based on n
+
+P1 Positions: 19/20 positions at [1] (ask to move out on 18/19th action, last action before logout)
+P2 Positions: 19/20 positions at [1]
+
+***2 player + disable gui***
+
+P1 Actions: 33 fixed actions + 1 logout => 34 fixed actions
+P2 Actions: 33 fixed actions + 1 logout => 34 fixed actions
+
+P1 Positions: 33 positions at [1] + [1 random logout position] => 34 positions
+P2 Positions: 33 positions at [1] + [1 random logout position] => 34 positions
+
+***2 player + enable gui***
+
+P1 Actions: 18/19 random actions + 1 logout => total 19/20 actions
+P2 Actions: 18/19 random actions + 1 logout => total 19/20 actions
+same number of actions for each player since same r
+
+P1 Positions: [1] + [8/9 random positions] + [0] P1 move out/disconnect + [6 random positions] + [0]  both move out/disconnect 
++ [1 random position] + [1 random logout position] => total 19/20 positions
+P2 Positions: [3] + [8/9 random positions] + [3] P1 move out/disconnect + [6 random positions] + [0]  both move out/disconnect 
++ [1 random position] + [1 random logout position] => total 19/20 positions
+number of positions match number of actions
+
+		self.actions_player_1 = [Helper.Actions.shield, Helper.Actions.grenade, Helper.Actions.reload,
+                                     Helper.Actions.shoot, Helper.Actions.shoot, Helper.Actions.shield,
+                                     Helper.Actions.shoot, Helper.Actions.shoot, Helper.Actions.reload,
+                                     Helper.Actions.shield, Helper.Actions.grenade, Helper.Actions.shield,
+                                     Helper.Actions.shoot, Helper.Actions.shield, Helper.Actions.shoot,
+                                     Helper.Actions.shoot, Helper.Actions.reload, Helper.Actions.shoot,
+                                     Helper.Actions.shoot, Helper.Actions.grenade, Helper.Actions.grenade,
+                                     Helper.Actions.grenade, Helper.Actions.grenade, Helper.Actions.reload,
+                                     Helper.Actions.shoot, Helper.Actions.shoot, Helper.Actions.reload,
+                                     Helper.Actions.reload, Helper.Actions.shield, Helper.Actions.reload,
+                                     Helper.Actions.shield, Helper.Actions.shoot, Helper.Actions.grenade]
+            self.actions_player_2 = [Helper.Actions.reload, Helper.Actions.shield, Helper.Actions.shoot,
+                                     Helper.Actions.grenade, Helper.Actions.grenade, Helper.Actions.shoot,
+                                     Helper.Actions.shield, Helper.Actions.grenade, Helper.Actions.reload,
+                                     Helper.Actions.reload, Helper.Actions.shoot, Helper.Actions.shoot,
+                                     Helper.Actions.shoot, Helper.Actions.grenade, Helper.Actions.grenade,
+                                     Helper.Actions.shoot, Helper.Actions.shield, Helper.Actions.shoot,
+                                     Helper.Actions.shield, Helper.Actions.reload, Helper.Actions.shoot,
+                                     Helper.Actions.shoot, Helper.Actions.shield, Helper.Actions.shoot,
+                                     Helper.Actions.shield, Helper.Actions.reload, Helper.Actions.reload,
+                                     Helper.Actions.shoot, Helper.Actions.reload, Helper.Actions.grenade,
+                                     Helper.Actions.grenade, Helper.Actions.shield, Helper.Actions.shoot]
+
+move_one_step(self)
+
+- get p1 pos and p2 pos from generated positions
+- get p1 action and p2 action from generated actions
+- check p1 action valid and p2 action valid
+- update p1 and p2 game state using pos, action and opponent valid
+- increment turn
+
+eval_server.py
+
+TurnGenerator:
+
+__init__(self)
+
+- initialise Move Engine
+- initialise p1 positions and actions
+- initialise p2 positions and actions
+- print positions and actions if DEBUG flag set
+
+iterate(self)
+
+- return true if finish all turns (cur_turn index from 0)
+- else increment turn counter and move_one_step in MoveEngine
+
+- if 2 players, print positions and update GUI
+- if 1 player, ask P1 to step out on turn 17/18 (last action 18/19 before logout) or turn 32 if no GUI
+
+- if 2 players, print actions and update GUI
+- if 1 player, only print p1 actions
+
+Server(threading.Thread)
+
+__init__(self, port_num, group_id)
+
+- init threading superclass
+- create TCP socket
+- bind socket to (localhost, port_num)
+
+- setup logger
+
+- setup TurnGenerator
+- timeout 60s and wait timer
+
+- store last p1 and p2 actions
+- connection socket with ultra96 (created from socket.accept())
+- secret key
+
+- no response flag
+- expecting_packet event flag
+- shutdown event flag
+
+game_state_diff(expected, received)
+
+- initialise expected game state from dict
+- initialise received game state from dict
+- generate and return diff dict
+
+setup_connection(self)
+
+- socket.accept() pops the first pending connection request from the connection request queue of the listening socket
+- new connection socket returned for data exchange between client and server
+- enter secret key is GUI else default secret key  
+- if correct key, iterate first turn
+- if wrong, self.stop()
+- return secret key
+
+setup_turn(self)
+
+- used after sending updated game state to ultra96 or when wait_timer timeouts
+- cancel wait timer if necessary
+- if no response, send updated game state anyways
+
+- self.iterate()
+
+iterate(self)
+
+- clear expecting_packet flag
+- iterate turn
+
+- if finished, self.stop()
+- else, get actions, set action time
+- start wait timer, set expecting_packet event flag and set no_response flag to True
+
+send_update(self, game_state: GameState)
+
+- send updated game state to ultra96 (Len_JSON utf-8 encoded only)
+
+stop(self)
+
+- close connection
+- cancel wait timer
+- set shutdown flag
+- print bye
+
+
+decrypt_message(self, cipher_text)
+
+- decode ciphertext base64
+- get iv from first 16 bytes
+- encode secret key to bytes in utf-8
+- create cipher
+- decrypt ciphertext
+- unpad decrypted message
+- decode utf-8
+- load JSON to get received game state dictionary from ultra96
+
+recv_game_state(self)
+
+- receive Len followed by crypt(JSON)
+- if no data or connection reset, self.stop()
+- recv is blocking and waits until data sent from client socket
+
+run(self)
+
+- clear expecting_packet event flag
+- server_socket.listen(1) listens for 1 incoming connection
+  	backlog specifies the number of unaccepted connections that the system will allow before refusing new connections
+
+- self.setup_connection() accepts connection, creates new connection socket for data exchange and returns shared secret key
+- self.setup_connection() also starts the first turn
+
+- main loop while shutdown event flag not set (only from self.stop())
+- wait to receive game state from ultra96 (blocking)
+- receive game state and clear expecting_packet event flag
+- send updated game state to ultra96
+- if fail, self.stop()
+- else setup next turn

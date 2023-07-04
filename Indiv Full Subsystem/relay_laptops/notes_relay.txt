@@ -1,0 +1,63 @@
+2. Communications between laptop and Ultra96 [Live + Video]
+Explain and demo ssh tunnelling to Ultra96 [2]
+Walk through code and explain concurrency/threading of code on laptop and Ultra96 (if any) [2]
+Demo successful communications between ONE laptop to Ultra96 with dummy data [3]
+
+
+RelayLaptopClient(threading.Thread):
+
+__init__(self, stu_username, stu_password, ultra96_port_num, player_num)
+
+- initialise threading superclass
+- create client socket
+- set server_address
+- set player number (player number tied to port number)
+- set shutdown event flag
+
+open_tunnel(self)
+
+- docs: https://sshtunnel.readthedocs.io/en/latest/
+- ssh_address_or_host is IP and Port of REMOTE GATEWAY
+- remote_bind_address is IP and Port of REMOTE CONNECTION
+- local_bind_address is default ('0.0.0.0', RANDOM_PORT)
+- block on close???
+
+- tunnel_one 
+- REMOTE GATEWAY = (stu, port 22)
+- REMOTE CONNECTION = (ultra96, port 22)
+
+- tunnel into stu? ultra96 ssh port 22 on stu?
+
+- tunnel_two
+- REMOTE GATEWAY = (localhost, tunnel_one_local.bind_port)
+- REMOTE CONNECTION = (localhost, ultra96 port num)
+
+- tunnel through tunnel_one onto ultra96
+- return tunnel_two.local_bind_address
+
+send_sensor_data(self, action)
+
+- create dummy data dict
+- data packet include player_num, data_type and data_value
+- if action is shield, grenade, reload or logout, data_type is IMU, dummy data values for if-else check on FPGA on ultra96
+- if action is shoot, data_type is GUN, value is 1 for shot fired
+- if action is hit, data_type is VEST, value is 1 for shot hit
+- currently undecided on bluetooth information
+- else to capture all bad action commands, discard at ultra96, can send action again
+- jsonify data and encode in utf-8
+- send to ultra96 similar to eval_server to ultra96 Len_JSON
+
+stop(self)
+
+- close client socket 
+- set shutdown event_flag
+
+run(self)
+
+- open tunnels and ssh onto ultra96
+- connect to relay laptop server on ultra96
+- while shutdown event flag not set
+- wait for action input to generate dummy data
+- if done, stop, close connection and shutdown
+- else send data to ultra96
+

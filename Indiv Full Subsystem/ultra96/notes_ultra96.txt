@@ -1,0 +1,302 @@
+1. Socket communications between Ultra96 to evaluation server 
+(Both client and server running on your laptop, via localhost): [Live + Video]
+Show successful communications with dummy data [2]
+
+4. In addition to individual communication, you should also show a single complete pipeline (as described below) [6] [Live + Video]
+At the Relay laptop, accept user input via the keyboard.
+At each keystroke, send a random dummy packet to Ultra96.
+At Ultra96, when you receive a dummy packet from the Relay laptop.
+Generate a random AI event (Grenade, shield, reload or shoot) for players
+Pass the information to the Eval server and Visualizer
+When the action is Grenade, send a Query request to the Visualizer to see if the opponent is in the field of view; and get the response.
+
+5. Game Engine:
+Walk through the code and explain the design of the game engine [2] [Live + Video]
+Explain the thread synchronization performed [2] [Live + Video]
+Demo game state change
+When player actions are detected using dummy actions [1] [Live + Video]
+Updation of game state when the correct state is received from the eval server (simulate it) [1] [Live + Video]
+Demo the sequence of events when a grenade action is detected (communication to visualizer can be simulated) [1] [Live + Video]
+
+Helper:
+
+- Actions Class including [no, shoot, shield, grenade, reload, logout]
+
+- 'none' changed to double quotes? "none"
+
+
+PlayerState:
+
+__init__(self)
+
+- game and ammo constants
+- initialise player state
+
+	self.hp             = self.max_hp
+	self.action         = 'none'
+      self.bullets        = self.magazine_size
+      self.grenades       = self.max_grenades
+      self.shield_time    = 0
+      self.shield_health  = 0
+      self.num_shield     = self.max_shields
+      self.num_deaths     = 0
+
+- self.shield_start_time = time.time() - 30
+
+	initial self.shield_start_time (time.time() - 30) would never be used since value is never checked until self.shield_time > 0
+	but self.shield_start_time will already be updated to time.time() when shield is activated
+
+get_dict(self)
+
+- convert player state to dictionary and return dictionary\
+- order of dict and state different? (num_shields and num_deaths swap)
+
+
+initialize(self, action, bullets_remaining, grenades_remaining,
+                   hp, num_deaths, num_unused_shield,
+                   shield_health, shield_time_remaining)
+
+- initialise/reset player state with values passed in
+- when will it be used?
+
+get_difference(self, game_state_received)
+
+- check action_expected with action_received to get action_matched
+- calculate difference between other integer player state values if different, else no key added to dictionary
+- return difference dictionary
+- good to get diff_dict with only {action_expected, action_received, action_matched = True}
+
+
+initialize_from_dict(self, player_dict: dict)
+
+- initialise/reset player state from player state dictionary
+
+
+initialize_from_player_state(self, player_state) ***CHANGED***
+
+- initialise/reset player state from player state
+- original player_state attributes weird? player_state.bullets_remaining no such attribute?
+- used in init_players in GameState, but passed in is still PlayerStateBase?
+
+
+StateStaff(PlayerStateBase):
+
+update(self, pos_self, pos_opponent, action_self, action_opponent, action_opponent_is_valid)
+
+
+- if shield time > 0, update shield time
+- if shield time still > 0, check if action is shield, update shield time anyway
+- if shield time = 0 and action is shield, refresh shield if num_shield > 0
+- if shield time <= 0, set shield health to 0
+
+- check for harm if opponent action is valid
+- if pos_self == 4 (barrier) and pos_opponent != 4, will not be hit, no harm
+- if pos_self != 4 and pos_opponent == 4 (barrier), will not be hit, no harm
+- if both within barrier or both outside barrier, will be hit, reduce shield and hp according to opponent shoot or grenade
+- can eat through shield to still reduce hp
+- if dead, revive with num_deahs += 1
+
+- check for ammo reduction or reload, only reload when self.bullets = 0
+
+action_is_valid(self, action_self)
+
+- check valid action
+- shield only when shield_time = 0
+- shoot when bullets > 0
+- grenade when grenades > 0
+- reload when bullets = 0
+- else invalid
+
+- valid action only sent to opponent, and only used to check for harm (shoot and grenade)
+- self need to check for valid shield and reload in own update
+
+GameState
+
+__init__(self)
+
+- game state consists of 2 player states
+
+get_dict(self)
+
+- combine p1 and p2 dictionary
+- game state dictionary
+
+_get_data_plain_text (self)
+
+- jsonify game state dictionary
+- not used by ultra96?
+
+send_plaintext(self, remote_socket)
+
+- gets json game state
+- send Len_JSON encoded in utf-8
+- not used by ultra96?
+- returns success
+
+init_player(...)
+
+- call player initialise function with values passed in
+- used by init-players_random
+
+init_players_random(self)
+
+- generate random values
+- init_player with the random values
+
+init_players (self, player_1: PlayerStateBase, player_2: PlayerStateBase)
+
+- call initialize_from_player_state for both players
+- not used?
+
+
+FPGA(threading.Thread)
+
+__init__(self)
+
+- initialise superclass threading
+
+run(self)
+
+- while not global_shotdown event flag (set by players logout)
+- read from IMU queue if not empty
+- currently using if-else to determine gesture
+- put corresponding action into actions queue
+
+
+GameEngine(threading.Thread)
+
+__init__(self)
+
+- initialise superclass threading
+- initialise GameState
+- intiialise players within the GameState, updaing players will update GameState indirectly
+- defualt actions  = Actions.no
+
+
+commit_action(self, pos_p1, pos_p2)
+
+- similar logic to move_one_step in eval_server MoveEngine
+- check if each player's moves are valid
+- update players based on pos, action and opponent valid
+- push current game state to game state queue to eval server
+- empty all queues and set player actions back to Actions.no, in case duplicate/extra before next turn
+- set global game_state_ready event flag to start sending game state to eval_server
+
+run(self)
+
+- while not global_shutdown event flag
+- check if update_from_eval_server event flag is set
+- if set, get updated game state from queue from eval_server
+- reset players from dictionary, should implicitly update game state 
+- print game stet just to check
+- empty game state queue from eval_server in case extra
+- clear update_from_eval_server event flag
+
+- check if game_state_ready event flag not set
+
+- if single player, get first action by checking current actions is Actions.no and queue is not empty
+- if action is logout, set global shutdown
+- else commit actions with both players in pos 1 (no need resolve hit/miss)
+
+- if 2 player, get first action from both players
+- once both actions not Actions.no, check if both logout, then set global shutdown
+- if either player shot or grenade, need resolve hit or miss 
+- block for 10s (can reduce time) and set pos1 to 1 and pos2 to 4 initially
+- if vest queue not empty after some delay, must have hit, change pos2 to 1
+- if vest queue empty, simulate barrier pos 4
+- commit action with pos1 and pos2
+
+
+RelayLaptopServer(threading.Thread)
+
+__init__(self, port_num, player_num)
+
+- initialise superclass threading
+- set player number
+- create socket and bind with (localhost, port_num) => port_num tied to each player/laptop
+
+setup_connection(self)
+
+- socket.accept() pops the first pending connection request from the connection request queue of the listening socket
+- new connection socket returned for data exchange between client and server
+
+stop(self)
+
+- close connection
+- set shutdown flag
+
+recv_sensor_data(self)
+
+- receive Len followed by sensor data JSON
+- if no data or connection reset, self.stop()
+- return sensor data
+
+run(self)
+
+- server_socket.listen(1) listens for 1 incoming connection
+  	backlog specifies the number of unaccepted connections that the system will allow before refusing new connections
+
+- self.setup_connection() accepts connection, creates new connection socket for data exchange
+
+- main loop while shutdown event flag not set (only from self.stop())
+- continuously receive sensor data from laptops 
+- based on player num and data type, put in respective queues
+- if fail, self.stop()
+
+EvalClient(threading.Thread)
+
+__init__(self, eval_server_ip_address, eval_server_port_num, secret_key)
+
+- intialise superclass threading
+- create socket and connect to eval_server ip and portnum
+
+encrypt_message(self, game_state_dict)
+
+- reverse of decrypt
+- first encode secret_key to bytes in utf-8
+- jsonify game state dict and encode in utf-8
+- pad the plaintext (PKCS7 not secure to oracle padding attack?)
+- create cipher
+- get iv generated by cipher
+- encrypt message and encode in base64
+
+stop(self)
+
+- close connection
+- set shutdown flag (should be global flag instead?)
+
+
+send_game_state(self, game_state_dict)
+
+- encrpyt game state dict
+- encode in utf-8
+- send Len_Cipher
+
+receive_updated_game_state(self)
+
+- receive Len followed by JSON
+- if no data or connection reset, self.stop()
+- put updated game state into queue from eval_server
+- set update from eval_server flag
+- return updated game state
+
+run(self)
+
+- while not global shutdown event flag set
+- wait for game_state_ready flag to be set (when both players commit)
+- get game state from game state queue to eval_server
+- empty queue
+- send game state to eval_server
+- clear game state ready flag
+- receive updated game state
+
+
+ultra96 game state updated only when both moves confirmed
+eval_server updates game state moment move_one_step/iterate
+
+ultra96 game state lag behind, shield time will be smaller by response time
+especially if need wait for shoot to register, can reduce sleep for actual sensor data
+
+
+
+
